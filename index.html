@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Strategic Commander: Admin Edition</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; margin: 0; padding: 20px; }
+        #ui-top { display: flex; gap: 10px; background: #34495e; padding: 15px; border-radius: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        canvas { border: 5px solid #22313f; background: #7f8c8d; cursor: crosshair; }
+        .stats { font-size: 1rem; font-weight: bold; }
+        .money-val { color: #2ecc71; }
+        .btn { padding: 8px 12px; border: none; color: white; cursor: pointer; font-weight: bold; border-radius: 5px; transition: 0.2s; }
+        .btn-factory { background: #e67e22; }
+        .btn-recruit { background: #3498db; }
+        .btn-research { background: #27ae60; }
+        .btn-admin { background: #95a5a6; }
+        .btn-build { background: #9b59b6; margin-top: 5px; width: 100%; }
+        #tileMenu, #adminSection { position: absolute; background: #ecf0f1; color: #2c3e50; padding: 15px; border-radius: 8px; display: none; flex-direction: column; z-index: 100; border: 2px solid #34495e; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+        #adminSection { top: 100px; width: 250px; }
+        input { margin-bottom: 10px; padding: 5px; width: 90%; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-top">
+        <div class="stats">Money: <span class="money-val">$<span id="money">30</span></span></div>
+        <button class="btn btn-factory" onclick="clickFactory()">Factory (+$<span id="incomeVal">1</span>)</button>
+        <button id="recruitBtn" class="btn btn-recruit" onclick="setMode('recruit')">Recruit ($10)</button>
+        <button id="researchBtn" class="btn btn-research" onclick="researchGear()">Gear ($50)</button>
+        <button class="btn btn-admin" onclick="openAdmin()">Admin Panel</button>
+        <div>Speed: <span id="speedVal">100</span>%</div>
+    </div>
+
+    <div style="position: relative;">
+        <canvas id="gameBoard" width="600" height="400"></canvas>
+        
+        <div id="tileMenu">
+            <div id="menuTitle" style="font-weight:bold; margin-bottom:5px">Tile Options</div>
+            <button class="btn btn-build" onclick="build('factory')">Build Factory ($30)</button>
+            <button class="btn btn-build" onclick="build('fort')">Fortify ($25)</button>
+            <button class="btn btn-build" style="background:#e74c3c" onclick="closeMenu()">Close</button>
+        </div>
+
+        <div id="adminSection">
+            <h3 style="margin-top:0">Unit Editor</h3>
+            <label>France Name:</label>
+            <input type="text" id="p1Name" value="France">
+            <label>France Icon (Emoji):</label>
+            <input type="text" id="p1Icon" value="🐱">
+            <hr>
+            <label>Germany Name:</label>
+            <input type="text" id="p2Name" value="Germany">
+            <label>Germany Icon (Emoji):</label>
+            <input type="text" id="p2Icon" value="🐆">
+            <button class="btn btn-research" onclick="saveAdmin()">Apply Changes</button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameBoard');
+    const ctx = canvas.getContext('2d');
+    const moneyEl = document.getElementById('money');
+    const incomeEl = document.getElementById('incomeVal');
+    const speedEl = document.getElementById('speedVal');
+    const tileMenu = document.getElementById('tileMenu');
+    const adminSection = document.getElementById('adminSection');
+
+    const TILE_SIZE = 50;
+    const COLS = 12;
+    const ROWS = 8;
+    
+    let money = 30;
+    let marchSpeed = 0.01;
+    let gearResearched = false;
+    let mode = 'select'; 
+    let selectedTile = null;
+    let menuTarget = null;
+    let tiles = [];
+    let marches = [];
+
+    // Customizable Unit Data
+    let teamData = {
+        france: { name: "France", icon: "🐱" },
+        germany: { name: "Germany", icon: "🐆" }
+    };
+
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            tiles.push({ x: c, y: r, owner: 'neutral', units: 0, type: 'empty', level: 0 });
+        }
+    }
+    tiles[0].owner = 'france'; 
+    tiles[tiles.length - 1].owner = 'germany';
+
+    function clickFactory() {
+        let income = 1;
+        tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') income++; });
+        money += income;
+        updateUI();
+    }
+
+    function researchGear() {
+        if (money >= 50 && !gearResearched) {
+            money -= 50; gearResearched = true; marchSpeed *= 1.15;
+            document.getElementById('researchBtn').disabled = true;
+            updateUI();
+        }
+    }
+
+    function openAdmin() {
+        let pass = prompt("Enter Admin Password:");
+        if(pass === "Lahazavr88@99") {
+            adminSection.style.display = 'flex';
+        } else {
+            alert("Wrong password!");
+        }
+    }
+
+    function saveAdmin() {
+        teamData.france.name = document.getElementById('p1Name').value;
+        teamData.france.icon = document.getElementById('p1Icon').value;
+        teamData.germany.name = document.getElementById('p2Name').value;
+        teamData.germany.icon = document.getElementById('p2Icon').value;
+        adminSection.style.display = 'none';
+    }
+
+    function setMode(newMode) { mode = newMode; closeMenu(); }
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+        const row = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+        const clickedTile = tiles.find(t => t.x === col && t.y === row);
+
+        if (mode === 'recruit') {
+            if (clickedTile.owner === 'france' && money >= 10) {
+                money -= 10; clickedTile.units += 1; setMode('select');
+            }
+        } else {
+            if (clickedTile.owner === 'france') {
+                if (selectedTile === clickedTile) {
+                    showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
+                } else {
+                    selectedTile = clickedTile;
+                    closeMenu();
+                }
+            } else if (selectedTile) {
+                startMarch(selectedTile, clickedTile, 'france');
+                selectedTile = null;
+            }
+        }
+        updateUI();
+    });
+
+    function showMenu(x, y, tile) {
+        menuTarget = tile;
+        tileMenu.style.display = 'flex';
+        tileMenu.style.left = x + "px"; tileMenu.style.top = y + "px";
+    }
+
+    function closeMenu() { tileMenu.style.display = 'none'; menuTarget = null; }
+
+    function build(type) {
+        if (type === 'factory' && money >= 30) { money -= 30; menuTarget.type = 'factory'; }
+        else if (type === 'fort' && money >= 25) { money -= 25; menuTarget.type = 'fort'; menuTarget.level += 1; }
+        closeMenu(); updateUI();
+    }
+
+    function startMarch(from, to, team) {
+        const dist = Math.abs(from.x - to.x) + Math.abs(from.y - to.y);
+        // Dist === 1 means adjacent. Works on any territory now.
+        if (dist === 1 && from.units > 0) {
+            marches.push({ fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, progress: 0, units: from.units, targetTile: to, team: team });
+            from.units = 0;
+        }
+    }
+
+    function update() {
+        for (let i = marches.length - 1; i >= 0; i--) {
+            let m = marches[i];
+            m.progress += (m.team === 'france') ? marchSpeed : 0.01;
+            if (m.progress >= 1) {
+                if (m.targetTile.owner !== 'neutral' && m.targetTile.owner !== m.team) {
+                    // COMBAT
+                    let defense = (m.targetTile.type === 'fort') ? m.targetTile.level : 0;
+                    let totalDef = m.targetTile.units + defense;
+                    if (m.units > totalDef) {
+                        m.targetTile.units = m.units - totalDef;
+                        m.targetTile.owner = m.team;
+                        m.targetTile.type = 'empty'; m.targetTile.level = 0;
+                    } else {
+                        m.targetTile.units = Math.max(0, totalDef - m.units - defense);
+                    }
+                } else {
+                    // REINFORCE / CAPTURE NEUTRAL
+                    m.targetTile.owner = m.team;
+                    m.targetTile.units += m.units;
+                }
+                marches.splice(i, 1);
+            }
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        tiles.forEach(tile => {
+            ctx.fillStyle = tile.owner === 'france' ? "#95a5a6" : (tile.owner === 'germany' ? "#d35400" : "#7f8c8d");
+            ctx.fillRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = "rgba(0,0,0,0.2)";
+            ctx.strokeRect(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+            ctx.fillStyle = "white";
+            if (tile.type === 'factory') ctx.fillText("🏭", tile.x * 50 + 32, tile.y * 50 + 15);
+            if (tile.type === 'fort') ctx.fillText("🏰" + tile.level, tile.x * 50 + 25, tile.y * 50 + 15);
+            
+            if (tile.units > 0) {
+                let icon = teamData[tile.owner].icon;
+                ctx.font = "bold 16px Arial";
+                ctx.fillText(icon + tile.units, tile.x * 50 + 4, tile.y * 50 + 44);
+            }
+        });
+
+        if (selectedTile) { ctx.strokeStyle = "yellow"; ctx.lineWidth = 3; ctx.strokeRect(selectedTile.x * 50, selectedTile.y * 50, 50, 50); }
+        
+        marches.forEach(m => {
+            ctx.beginPath(); ctx.strokeStyle = m.team === 'france' ? "#f1c40f" : "#e74c3c"; ctx.lineWidth = 4;
+            ctx.moveTo(m.fromX * 50 + 25, m.fromY * 50 + 25);
+            ctx.lineTo((m.fromX * 50 + 25) + (m.toX - m.fromX) * 50 * m.progress, (m.fromY * 50 + 25) + (m.toY - m.fromY) * 50 * m.progress);
+            ctx.stroke();
+        });
+        update();
+        requestAnimationFrame(draw);
+    }
+
+    function updateUI() {
+        moneyEl.innerText = Math.floor(money);
+        let inc = 1;
+        tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; });
+        incomeEl.innerText = inc;
+        speedEl.innerText = gearResearched ? "115" : "100";
+    }
+    draw();
+</script>
+</body>
+</html>
