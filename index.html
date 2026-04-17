@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Strategic Commander: Unit Creator</title>
+    <title>Strategic Commander: Ultimate Edition</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; margin: 0; padding: 20px; }
         #ui-top { display: flex; gap: 10px; background: #34495e; padding: 15px; border-radius: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
@@ -12,6 +12,7 @@
         .btn { padding: 8px 12px; border: none; color: white; cursor: pointer; font-weight: bold; border-radius: 5px; transition: 0.2s; }
         .btn-factory { background: #e67e22; }
         .btn-recruit { background: #3498db; }
+        .btn-research { background: #27ae60; }
         .btn-admin { background: #95a5a6; }
         .btn-build { background: #9b59b6; margin-top: 5px; width: 100%; }
         #tileMenu, #adminSection, #recruitSelect { position: absolute; background: #ecf0f1; color: #2c3e50; padding: 15px; border-radius: 8px; display: none; flex-direction: column; z-index: 100; border: 2px solid #34495e; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
@@ -25,15 +26,17 @@
     <div id="ui-top">
         <div class="stats">Money: <span class="money-val">$<span id="money">30</span></span></div>
         <button class="btn btn-factory" onclick="clickFactory()">Factory (+$<span id="incomeVal">1</span>)</button>
-        <button id="recruitBtn" class="btn btn-recruit" onclick="openRecruitMenu()">Recruit Unit</button>
+        <button id="recruitBtn" class="btn btn-recruit" onclick="openRecruitMenu()">Recruit</button>
+        <button id="researchBtn" class="btn btn-research" onclick="researchGear()">Gear Upgrade ($50)</button>
         <button class="btn btn-admin" onclick="openAdmin()">Admin Panel</button>
+        <div class="stats">Speed: <span id="speedVal">100</span>%</div>
     </div>
 
     <div style="position: relative;">
         <canvas id="gameBoard" width="600" height="400"></canvas>
         
         <div id="recruitSelect">
-            <div style="font-weight:bold; margin-bottom:10px">Select Unit to Buy:</div>
+            <div style="font-weight:bold; margin-bottom:10px">Select Unit:</div>
             <div id="unitListOptions"></div>
             <button class="btn btn-build" style="background:#e74c3c" onclick="closeRecruit()">Cancel</button>
         </div>
@@ -50,9 +53,13 @@
             <div id="existingUnits" style="margin-bottom:10px"></div>
             <hr>
             <h4>Create New Unit</h4>
-            <input type="text" id="newUnitName" placeholder="Unit Name (e.g. Tank)">
+            <input type="text" id="newUnitName" placeholder="Name (e.g. Tank)">
             <input type="text" id="newUnitIcon" placeholder="Emoji (e.g. 🚜)">
-            <input type="number" id="newUnitCost" placeholder="Cost (e.g. 50)">
+            <input type="number" id="newUnitCost" placeholder="Cost">
+            <select id="newUnitTeam" style="margin-bottom:10px; width:95%">
+                <option value="france">Team France (Player)</option>
+                <option value="germany">Team Germany (AI)</option>
+            </select>
             <button class="btn btn-recruit" onclick="addNewUnit()">Add to Registry</button>
             <button class="btn btn-build" style="background:#e74c3c" onclick="closeAdmin()">Close</button>
         </div>
@@ -67,17 +74,15 @@
     const COLS = 12;
     const ROWS = 8;
     
-    let money = 100;
-    let mode = 'select'; 
-    let selectedTile = null;
-    let menuTarget = null;
-    let tiles = [];
-    let marches = [];
-    let activeUnitToBuy = null;
+    let money = 30, aiMoney = 30;
+    let marchSpeed = 0.01;
+    let gearResearched = false;
+    let mode = 'select', selectedTile = null, menuTarget = null, activeUnitToBuy = null;
+    let tiles = [], marches = [];
 
-    // Unit Database
+    // Base Registry
     let unitRegistry = [
-        { name: "Infantry", icon: "🐱", cost: 10, team: "france" },
+        { name: "Cat", icon: "🐱", cost: 10, team: "france" },
         { name: "Caracal", icon: "🐆", cost: 10, team: "germany" }
     ];
 
@@ -96,47 +101,72 @@
         updateUI();
     }
 
-    // --- ADMIN LOGIC ---
+    function researchGear() {
+        if (money >= 50 && !gearResearched) {
+            money -= 50; gearResearched = true; marchSpeed *= 1.15;
+            document.getElementById('researchBtn').disabled = true;
+            document.getElementById('researchBtn').innerText = "Gear Maxed";
+            updateUI();
+        }
+    }
+
+    // --- ADMIN ---
     function openAdmin() {
         if(prompt("Password:") === "Lahazavr88@99") {
             document.getElementById('adminSection').style.display = 'flex';
             renderAdminUnits();
         }
     }
-
     function renderAdminUnits() {
-        const div = document.getElementById('existingUnits');
-        div.innerHTML = unitRegistry.map(u => `<div class="unit-item">${u.icon} ${u.name} ($${u.cost}) - ${u.team}</div>`).join('');
+        document.getElementById('existingUnits').innerHTML = unitRegistry.map(u => 
+            `<div class="unit-item">${u.icon} ${u.name} ($${u.cost}) [${u.team}]</div>`).join('');
     }
-
     function addNewUnit() {
         const name = document.getElementById('newUnitName').value;
         const icon = document.getElementById('newUnitIcon').value;
         const cost = parseInt(document.getElementById('newUnitCost').value);
+        const team = document.getElementById('newUnitTeam').value;
         if(name && icon && cost) {
-            unitRegistry.push({ name, icon, cost, team: "france" }); // Defaults to player team
+            unitRegistry.push({ name, icon, cost, team });
             renderAdminUnits();
         }
     }
 
-    // --- RECRUIT LOGIC ---
+    // --- RECRUIT ---
     function openRecruitMenu() {
         document.getElementById('recruitSelect').style.display = 'flex';
-        const list = document.getElementById('unitListOptions');
-        list.innerHTML = unitRegistry.filter(u => u.team === "france").map(u => 
+        document.getElementById('unitListOptions').innerHTML = unitRegistry.filter(u => u.team === "france").map(u => 
             `<button class="btn btn-build" onclick="prepRecruit('${u.icon}', ${u.cost})">${u.icon} ${u.name} ($${u.cost})</button>`
         ).join('');
     }
-
     function prepRecruit(icon, cost) {
-        if(money >= cost) {
-            activeUnitToBuy = { icon, cost };
-            mode = 'recruit';
-            closeRecruit();
-        } else { alert("Not enough money!"); }
+        if(money >= cost) { activeUnitToBuy = { icon, cost }; mode = 'recruit'; closeRecruit(); }
+        else alert("Need more money!");
     }
 
-    // --- INTERACTION ---
+    // --- GAME LOOP ---
+    function runAI() {
+        aiMoney += 2;
+        let aiUnits = unitRegistry.filter(u => u.team === "germany");
+        let aiTiles = tiles.filter(t => t.owner === 'germany');
+
+        // AI Spawning
+        if (aiMoney >= 10 && aiTiles.length > 0) {
+            let u = aiUnits[Math.floor(Math.random() * aiUnits.length)];
+            if(aiMoney >= u.cost) {
+                let target = aiTiles[Math.floor(Math.random() * aiTiles.length)];
+                target.units += 1; target.icon = u.icon;
+                aiMoney -= u.cost;
+            }
+        }
+        // AI Movement
+        aiTiles.filter(t => t.units > 0).forEach(tile => {
+            let neighbors = tiles.filter(t => Math.abs(t.x - tile.x) + Math.abs(t.y - tile.y) === 1);
+            startMarch(tile, neighbors[Math.floor(Math.random() * neighbors.length)], 'germany');
+        });
+    }
+    setInterval(runAI, 4000);
+
     canvas.addEventListener('mousedown', (e) => {
         const rect = canvas.getBoundingClientRect();
         const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
@@ -145,19 +175,13 @@
 
         if (mode === 'recruit' && activeUnitToBuy) {
             if (clickedTile.owner === 'france') {
-                money -= activeUnitToBuy.cost;
-                clickedTile.units += 1;
-                clickedTile.icon = activeUnitToBuy.icon;
-                mode = 'select';
-                activeUnitToBuy = null;
+                money -= activeUnitToBuy.cost; clickedTile.units += 1; clickedTile.icon = activeUnitToBuy.icon;
+                mode = 'select'; activeUnitToBuy = null;
             }
         } else {
             if (clickedTile.owner === 'france') {
-                if (selectedTile === clickedTile) {
-                    showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
-                } else {
-                    selectedTile = clickedTile;
-                }
+                if (selectedTile === clickedTile) showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
+                else selectedTile = clickedTile;
             } else if (selectedTile) {
                 startMarch(selectedTile, clickedTile, 'france');
                 selectedTile = null;
@@ -169,10 +193,7 @@
     function startMarch(from, to, team) {
         const dist = Math.abs(from.x - to.x) + Math.abs(from.y - to.y);
         if (dist === 1 && from.units > 0) {
-            marches.push({ 
-                fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, 
-                progress: 0, units: from.units, targetTile: to, team: team, icon: from.icon 
-            });
+            marches.push({ fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, progress: 0, units: from.units, targetTile: to, team: team, icon: from.icon });
             from.units = 0;
         }
     }
@@ -180,24 +201,16 @@
     function update() {
         for (let i = marches.length - 1; i >= 0; i--) {
             let m = marches[i];
-            m.progress += 0.01;
+            m.progress += (m.team === 'france') ? marchSpeed : 0.01;
             if (m.progress >= 1) {
                 if (m.targetTile.owner !== m.team) {
-                    // ATTACK
-                    let defense = (m.targetTile.type === 'fort') ? m.targetTile.level : 0;
-                    if (m.units > (m.targetTile.units + defense)) {
-                        m.targetTile.units = m.units - (m.targetTile.units + defense);
-                        m.targetTile.owner = m.team;
-                        m.targetTile.icon = m.icon;
-                        m.targetTile.type = 'empty';
-                    } else {
-                        m.targetTile.units = Math.max(0, (m.targetTile.units + defense) - m.units);
-                    }
-                } else {
-                    // REINFORCE OWN TERRITORY
-                    m.targetTile.units += m.units;
-                    m.targetTile.icon = m.icon; // Update icon to latest arriving unit
-                }
+                    let def = (m.targetTile.type === 'fort') ? m.targetTile.level : 0;
+                    let power = m.targetTile.units + def;
+                    if (m.units > power) {
+                        m.targetTile.units = m.units - power;
+                        m.targetTile.owner = m.team; m.targetTile.icon = m.icon; m.targetTile.type = 'empty';
+                    } else { m.targetTile.units = Math.max(0, power - m.units); }
+                } else { m.targetTile.units += m.units; m.targetTile.icon = m.icon; }
                 marches.splice(i, 1);
             }
         }
@@ -208,13 +221,12 @@
         tiles.forEach(tile => {
             ctx.fillStyle = tile.owner === 'france' ? "#95a5a6" : (tile.owner === 'germany' ? "#d35400" : "#7f8c8d");
             ctx.fillRect(tile.x * 50, tile.y * 50, 50, 50);
-            ctx.strokeStyle = "rgba(0,0,0,0.1)";
-            ctx.strokeRect(tile.x * 50, tile.y * 50, 50, 50);
+            ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.strokeRect(tile.x * 50, tile.y * 50, 50, 50);
             if (tile.type === 'factory') ctx.fillText("🏭", tile.x * 50 + 35, tile.y * 50 + 15);
             if (tile.type === 'fort') ctx.fillText("🏰", tile.x * 50 + 35, tile.y * 50 + 15);
             if (tile.units > 0) {
                 ctx.fillStyle = "white"; ctx.font = "bold 15px Arial";
-                ctx.fillText((tile.icon || "?") + tile.units, tile.x * 50 + 5, tile.y * 50 + 40);
+                ctx.fillText((tile.icon || "🐱") + tile.units, tile.x * 50 + 5, tile.y * 50 + 40);
             }
         });
         if (selectedTile) { ctx.strokeStyle = "yellow"; ctx.lineWidth = 3; ctx.strokeRect(selectedTile.x * 50, selectedTile.y * 50, 50, 50); }
@@ -232,7 +244,12 @@
     function closeAdmin() { document.getElementById('adminSection').style.display = 'none'; }
     function closeRecruit() { document.getElementById('recruitSelect').style.display = 'none'; }
     function build(t) { if(t==='factory' && money>=30){money-=30; menuTarget.type='factory';} else if(t==='fort' && money>=25){money-=25; menuTarget.type='fort'; menuTarget.level++;} closeMenu(); updateUI(); }
-    function updateUI() { moneyEl.innerText = Math.floor(money); let inc = 1; tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; }); document.getElementById('incomeVal').innerText = inc; }
+    function updateUI() { 
+        moneyEl.innerText = Math.floor(money); 
+        let inc = 1; tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; });
+        document.getElementById('incomeVal').innerText = inc;
+        document.getElementById('speedVal').innerText = gearResearched ? "115" : "100";
+    }
     draw();
 </script>
 </body>
