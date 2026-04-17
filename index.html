@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Strategic Commander: Ultimate Edition</title>
+    <title>Strategic Commander: Pro Controls</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; margin: 0; padding: 20px; }
         #ui-top { display: flex; gap: 10px; background: #34495e; padding: 15px; border-radius: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
@@ -19,6 +19,7 @@
         #adminSection { top: 50px; width: 300px; max-height: 80vh; overflow-y: auto; }
         input { margin-bottom: 10px; padding: 5px; width: 90%; }
         .unit-item { background: #ddd; padding: 5px; margin-bottom: 5px; border-radius: 4px; font-size: 0.8rem; color: #333; }
+        #controls-hint { margin-top: 10px; color: #bdc3c7; font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -53,8 +54,8 @@
             <div id="existingUnits" style="margin-bottom:10px"></div>
             <hr>
             <h4>Create New Unit</h4>
-            <input type="text" id="newUnitName" placeholder="Name (e.g. Tank)">
-            <input type="text" id="newUnitIcon" placeholder="Emoji (e.g. 🚜)">
+            <input type="text" id="newUnitName" placeholder="Name">
+            <input type="text" id="newUnitIcon" placeholder="Emoji">
             <input type="number" id="newUnitCost" placeholder="Cost">
             <select id="newUnitTeam" style="margin-bottom:10px; width:95%">
                 <option value="france">Team France (Player)</option>
@@ -63,6 +64,10 @@
             <button class="btn btn-recruit" onclick="addNewUnit()">Add to Registry</button>
             <button class="btn btn-build" style="background:#e74c3c" onclick="closeAdmin()">Close</button>
         </div>
+    </div>
+
+    <div id="controls-hint">
+        <strong>Left Click:</strong> Select / Open Build Menu | <strong>Right Click:</strong> March Units
     </div>
 
 <script>
@@ -74,13 +79,12 @@
     const COLS = 12;
     const ROWS = 8;
     
-    let money = 30, aiMoney = 30;
+    let money = 50, aiMoney = 30;
     let marchSpeed = 0.01;
     let gearResearched = false;
     let mode = 'select', selectedTile = null, menuTarget = null, activeUnitToBuy = null;
     let tiles = [], marches = [];
 
-    // Base Registry
     let unitRegistry = [
         { name: "Cat", icon: "🐱", cost: 10, team: "france" },
         { name: "Caracal", icon: "🐆", cost: 10, team: "germany" }
@@ -94,6 +98,9 @@
     tiles[0].owner = 'france'; tiles[0].icon = "🐱";
     tiles[tiles.length - 1].owner = 'germany'; tiles[tiles.length-1].icon = "🐆";
 
+    // Disable Right Click Menu
+    canvas.oncontextmenu = (e) => e.preventDefault();
+
     function clickFactory() {
         let income = 1;
         tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') income++; });
@@ -105,7 +112,6 @@
         if (money >= 50 && !gearResearched) {
             money -= 50; gearResearched = true; marchSpeed *= 1.15;
             document.getElementById('researchBtn').disabled = true;
-            document.getElementById('researchBtn').innerText = "Gear Maxed";
             updateUI();
         }
     }
@@ -141,25 +147,18 @@
     }
     function prepRecruit(icon, cost) {
         if(money >= cost) { activeUnitToBuy = { icon, cost }; mode = 'recruit'; closeRecruit(); }
-        else alert("Need more money!");
     }
 
-    // --- GAME LOOP ---
+    // --- AI ---
     function runAI() {
         aiMoney += 2;
         let aiUnits = unitRegistry.filter(u => u.team === "germany");
         let aiTiles = tiles.filter(t => t.owner === 'germany');
-
-        // AI Spawning
         if (aiMoney >= 10 && aiTiles.length > 0) {
             let u = aiUnits[Math.floor(Math.random() * aiUnits.length)];
-            if(aiMoney >= u.cost) {
-                let target = aiTiles[Math.floor(Math.random() * aiTiles.length)];
-                target.units += 1; target.icon = u.icon;
-                aiMoney -= u.cost;
-            }
+            let target = aiTiles[Math.floor(Math.random() * aiTiles.length)];
+            target.units += 1; target.icon = u.icon; aiMoney -= u.cost;
         }
-        // AI Movement
         aiTiles.filter(t => t.units > 0).forEach(tile => {
             let neighbors = tiles.filter(t => Math.abs(t.x - tile.x) + Math.abs(t.y - tile.y) === 1);
             startMarch(tile, neighbors[Math.floor(Math.random() * neighbors.length)], 'germany');
@@ -167,24 +166,30 @@
     }
     setInterval(runAI, 4000);
 
+    // --- CLICK HANDLING ---
     canvas.addEventListener('mousedown', (e) => {
         const rect = canvas.getBoundingClientRect();
         const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
         const row = Math.floor((e.clientY - rect.top) / TILE_SIZE);
         const clickedTile = tiles.find(t => t.x === col && t.y === row);
+        if (!clickedTile) return;
 
-        if (mode === 'recruit' && activeUnitToBuy) {
-            if (clickedTile.owner === 'france') {
-                money -= activeUnitToBuy.cost; clickedTile.units += 1; clickedTile.icon = activeUnitToBuy.icon;
-                mode = 'select'; activeUnitToBuy = null;
+        // LEFT CLICK: Select or Open Build Menu
+        if (e.button === 0) { 
+            if (mode === 'recruit' && activeUnitToBuy) {
+                if (clickedTile.owner === 'france') {
+                    money -= activeUnitToBuy.cost; clickedTile.units += 1; clickedTile.icon = activeUnitToBuy.icon;
+                    mode = 'select'; activeUnitToBuy = null;
+                }
+            } else if (clickedTile.owner === 'france') {
+                selectedTile = clickedTile;
+                showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
             }
-        } else {
-            if (clickedTile.owner === 'france') {
-                if (selectedTile === clickedTile) showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
-                else selectedTile = clickedTile;
-            } else if (selectedTile) {
+        } 
+        // RIGHT CLICK: March Units
+        else if (e.button === 2) {
+            if (selectedTile && selectedTile.owner === 'france' && selectedTile.units > 0) {
                 startMarch(selectedTile, clickedTile, 'france');
-                selectedTile = null;
             }
         }
         updateUI();
@@ -208,7 +213,7 @@
                     let power = m.targetTile.units + def;
                     if (m.units > power) {
                         m.targetTile.units = m.units - power;
-                        m.targetTile.owner = m.team; m.targetTile.icon = m.icon; m.targetTile.type = 'empty';
+                        m.targetTile.owner = m.team; m.targetTile.icon = m.icon; m.targetTile.type = 'empty'; m.targetTile.level = 0;
                     } else { m.targetTile.units = Math.max(0, power - m.units); }
                 } else { m.targetTile.units += m.units; m.targetTile.icon = m.icon; }
                 marches.splice(i, 1);
