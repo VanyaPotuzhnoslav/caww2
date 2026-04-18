@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>The Caracalo-Cat War: AoH Edition</title>
+    <title>The Caracalo-Cat War: Multi-Recruit</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; margin: 0; padding: 20px; }
         #ui-top { display: none; gap: 10px; background: #34495e; padding: 15px; border-radius: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
@@ -22,7 +22,10 @@
         #tileMenu, #adminSection, #recruitSelect { position: absolute; background: #ecf0f1; color: #2c3e50; padding: 15px; border-radius: 8px; display: none; flex-direction: column; z-index: 100; border: 2px solid #34495e; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
         #adminSection { width: 320px; max-height: 80vh; overflow-y: auto; top: 20px; }
         input { margin-bottom: 8px; padding: 6px; width: 90%; border: 1px solid #ccc; border-radius: 4px; }
-        #controls-hint { margin-top: 10px; color: #bdc3c7; font-size: 0.85rem; display: none; }
+
+        /* Multi-Recruit UI */
+        .recruit-counter { display: flex; align-items: center; justify-content: space-between; background: #ddd; padding: 10px; border-radius: 5px; margin-top: 10px; }
+        .count-btn { width: 30px; height: 30px; background: #2c3e50; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 1.2rem; }
     </style>
 </head>
 <body>
@@ -31,12 +34,12 @@
         <h1 style="color: #f1c40f; font-size: 3rem; margin-bottom: 40px;">CAMPAIGN</h1>
         <div class="campaign-card" onclick="startCampaign()">
             <h2>The Caracalo-Cat War</h2>
-            <p>Advanced Battle System & Custom Visuals</p>
+            <p>Select units, stack reinforcements, and win!</p>
         </div>
     </div>
 
     <div id="ui-top">
-        <div class="stats">Money: <span class="money-val">$<span id="money">50</span></span></div>
+        <div class="stats">Money: <span class="money-val">$<span id="money">100</span></span></div>
         <button class="btn btn-factory" onclick="clickFactory()">Factory (+$<span id="incomeVal">1</span>)</button>
         <button id="recruitBtn" class="btn btn-recruit" onclick="openRecruitMenu()">Recruit</button>
         <button class="btn btn-admin" onclick="openAdmin()">Admin Panel</button>
@@ -44,32 +47,40 @@
 
     <div style="position: relative;">
         <canvas id="gameBoard" width="700" height="500"></canvas>
+        
         <div id="recruitSelect">
-            <div style="font-weight:bold; margin-bottom:10px">Recruit Units:</div>
+            <div style="font-weight:bold; margin-bottom:10px">Choose Unit:</div>
             <div id="unitListOptions"></div>
-            <button class="btn btn-build" style="background:#e74c3c" onclick="closeRecruit()">Cancel</button>
+            
+            <div id="counterSection" style="display:none;">
+                <div class="recruit-counter">
+                    <button class="count-btn" onclick="changeRecruitCount(-1)">-</button>
+                    <span id="batchCount" style="font-size: 1.2rem; font-weight: bold;">1</span>
+                    <button class="count-btn" onclick="changeRecruitCount(1)">+</button>
+                </div>
+                <div style="margin-top:5px; font-size: 0.9rem;">Total: $<span id="batchTotal">0</span></div>
+                <button class="btn btn-recruit" style="width:100%; margin-top:10px;" onclick="confirmPurchase()">Confirm Purchase</button>
+            </div>
+            
+            <button class="btn btn-build" style="background:#e74c3c; margin-top:10px" onclick="closeRecruit()">Cancel</button>
         </div>
-        <div id="tileMenu"><div id="menuTitle" style="font-weight:bold; margin-bottom:5px">Tile Options</div><button class="btn btn-build" onclick="build('factory')">Build Factory ($30)</button><button class="btn btn-build" onclick="build('fort')">Fortify ($25)</button><button class="btn btn-build" style="background:#e74c3c" onclick="closeMenu()">Close</button></div>
+
+        <div id="tileMenu"><button class="btn btn-build" onclick="build('factory')">Build Factory ($30)</button><button class="btn btn-build" onclick="build('fort')">Fortify ($25)</button><button class="btn btn-build" style="background:#e74c3c" onclick="closeMenu()">Close</button></div>
         
         <div id="adminSection">
-            <h3 style="margin-top:0">Admin: Unit Creator</h3>
+            <h3>Admin: Unit Creator</h3>
             <div id="existingUnits" style="font-size: 0.8rem; margin-bottom: 10px;"></div>
             <hr>
             <input type="text" id="newUnitName" placeholder="Unit Name">
             <input type="text" id="newUnitIcon" placeholder="Emoji OR Image URL">
             <input type="number" id="newUnitCost" placeholder="Cost ($)">
-            <input type="number" id="newUnitHP" placeholder="HP (e.g. 100)">
-            <input type="number" id="newUnitAtk" placeholder="Attack (e.g. 20)">
-            <select id="newUnitTeam" style="width: 95%; margin-bottom: 10px;">
-                <option value="france">Blue Team</option>
-                <option value="germany">Orange Team</option>
-            </select>
-            <button class="btn btn-recruit" onclick="addNewUnit()">Create & Register</button>
+            <input type="number" id="newUnitHP" placeholder="HP">
+            <input type="number" id="newUnitAtk" placeholder="Attack">
+            <select id="newUnitTeam" style="width: 95%; margin-bottom: 10px;"><option value="france">Blue Team</option><option value="germany">Orange Team</option></select>
+            <button class="btn btn-recruit" onclick="addNewUnit()">Add</button>
             <button class="btn btn-build" style="background:#e74c3c" onclick="closeAdmin()">Close</button>
         </div>
     </div>
-
-    <div id="controls-hint"><strong>L-Click:</strong> Select/Build | <strong>R-Click:</strong> Attack/Move</div>
 
 <script>
     const canvas = document.getElementById('gameBoard');
@@ -81,8 +92,13 @@
     const ROWS = 10;
     
     let money = 100, aiMoney = 50;
-    let marchSpeed = 0.015;
     let tiles = [], marches = [], imageCache = {};
+    let selectedTile = null;
+    let menuTarget = null;
+    
+    // Recruitment State
+    let tempUnit = null;
+    let recruitCount = 1;
 
     let unitRegistry = [
         { name: "Blue Soldier", icon: "🐱", cost: 10, hp: 100, atk: 25, team: "france" },
@@ -93,10 +109,9 @@
         document.getElementById('main-menu').style.display = 'none';
         document.getElementById('ui-top').style.display = 'flex';
         document.getElementById('gameBoard').style.display = 'block';
-        document.getElementById('controls-hint').style.display = 'block';
         initMap();
         setInterval(runAI, 3000);
-        setInterval(processCombat, 500); // Combat ticks every 0.5s
+        setInterval(processCombat, 500);
         draw();
     }
 
@@ -121,75 +136,73 @@
 
     canvas.oncontextmenu = (e) => e.preventDefault();
 
-    function addNewUnit() {
-        const name = document.getElementById('newUnitName').value;
-        const icon = document.getElementById('newUnitIcon').value;
-        const cost = parseInt(document.getElementById('newUnitCost').value) || 10;
-        const hp = parseInt(document.getElementById('newUnitHP').value) || 100;
-        const atk = parseInt(document.getElementById('newUnitAtk').value) || 20;
-        const team = document.getElementById('newUnitTeam').value;
-
-        if (icon.startsWith('http')) {
-            const img = new Image();
-            img.src = icon;
-            imageCache[icon] = img;
+    // --- RECRUITMENT LOGIC ---
+    function openRecruitMenu() {
+        if(!selectedTile || selectedTile.owner !== 'france') {
+            alert("Select your blue territory first!");
+            return;
         }
-
-        unitRegistry.push({ name, icon, cost, hp, atk, team });
-        renderAdminUnits();
+        document.getElementById('recruitSelect').style.display = 'flex';
+        document.getElementById('counterSection').style.display = 'none';
+        document.getElementById('unitListOptions').innerHTML = unitRegistry.filter(u => u.team === "france").map(u => 
+            `<button class="btn btn-build" onclick="selectForBatch('${u.name}')">${u.name} ($${u.cost})</button>`
+        ).join('');
     }
 
-    function processCombat() {
-        marches.forEach(m => {
-            if (m.progress >= 1 && m.targetTile.owner !== 'neutral' && m.targetTile.owner !== m.team) {
-                // AoH3 Battle Tick
-                let attackerPower = m.units * m.unitType.atk;
-                let defenderPower = m.targetTile.units * m.targetTile.unitType.atk;
-                
-                // Fort bonus
-                if (m.targetTile.type === 'fort') defenderPower *= (1 + m.targetTile.level * 0.2);
-
-                m.targetTile.currentHP -= attackerPower;
-                m.totalHP -= defenderPower;
-
-                // Update counts based on HP
-                m.units = Math.ceil(m.totalHP / m.unitType.hp);
-                m.targetTile.units = Math.ceil(m.targetTile.currentHP / m.targetTile.unitType.hp);
-            }
-        });
+    function selectForBatch(name) {
+        tempUnit = unitRegistry.find(u => u.name === name);
+        recruitCount = 1;
+        document.getElementById('counterSection').style.display = 'block';
+        updateBatchUI();
     }
 
-    function update() {
-        for (let i = marches.length - 1; i >= 0; i--) {
-            let m = marches[i];
-            
-            // Movement phase
-            if (m.progress < 1) {
-                m.progress += marchSpeed;
+    function changeRecruitCount(val) {
+        recruitCount = Math.max(1, recruitCount + val);
+        updateBatchUI();
+    }
+
+    function updateBatchUI() {
+        document.getElementById('batchCount').innerText = recruitCount;
+        document.getElementById('batchTotal').innerText = recruitCount * tempUnit.cost;
+    }
+
+    function confirmPurchase() {
+        let total = recruitCount * tempUnit.cost;
+        if(money >= total) {
+            money -= total;
+            selectedTile.units += recruitCount;
+            selectedTile.currentHP += (recruitCount * tempUnit.hp);
+            selectedTile.unitType = tempUnit;
+            closeRecruit();
+            updateUI();
+        } else {
+            alert("Insufficient funds!");
+        }
+    }
+
+    // --- CORE GAMEPLAY ---
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+        const row = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+        const clickedTile = tiles.find(t => t.x === col && t.y === row);
+        
+        if (!clickedTile) return;
+
+        if (e.button === 0) { // Left Click
+            selectedTile = clickedTile;
+            if(clickedTile.owner === 'france') {
+                showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile);
             } else {
-                // Battle or Arrival phase
-                if (m.targetTile.owner === m.team || m.targetTile.owner === 'neutral') {
-                    // Friendly Reinforcement or Neutral Capture
-                    m.targetTile.owner = m.team;
-                    m.targetTile.unitType = m.unitType;
-                    m.targetTile.units += m.units;
-                    m.targetTile.currentHP += m.totalHP;
-                    marches.splice(i, 1);
-                } else {
-                    // It's an active battle. If attacker or defender dies, end march.
-                    if (m.units <= 0) { marches.splice(i, 1); }
-                    else if (m.targetTile.units <= 0) {
-                        m.targetTile.owner = m.team;
-                        m.targetTile.unitType = m.unitType;
-                        m.targetTile.units = m.units;
-                        m.targetTile.currentHP = m.totalHP;
-                        m.targetTile.type = 'empty';
-                        marches.splice(i, 1);
-                    }
-                }
+                closeMenu();
+            }
+        } else if (e.button === 2) { // Right Click
+            if (selectedTile && selectedTile.owner === 'france' && selectedTile.units > 0) {
+                startMarch(selectedTile, clickedTile, 'france');
             }
         }
-    }
+        updateUI();
+    });
 
     function startMarch(from, to, team) {
         if (Math.abs(from.x - to.x) + Math.abs(from.y - to.y) === 1 && from.units > 0) {
@@ -199,6 +212,50 @@
                 unitType: from.unitType, targetTile: to, team: team 
             });
             from.units = 0; from.currentHP = 0;
+        }
+    }
+
+    function processCombat() {
+        marches.forEach(m => {
+            if (m.progress >= 1 && m.targetTile.owner !== 'neutral' && m.targetTile.owner !== m.team) {
+                let attackerPower = m.units * m.unitType.atk;
+                let defenderPower = m.targetTile.units * m.targetTile.unitType.atk;
+                if (m.targetTile.type === 'fort') defenderPower *= (1 + m.targetTile.level * 0.2);
+
+                m.targetTile.currentHP -= attackerPower;
+                m.totalHP -= defenderPower;
+                
+                m.units = Math.max(0, Math.ceil(m.totalHP / m.unitType.hp));
+                m.targetTile.units = Math.max(0, Math.ceil(m.targetTile.currentHP / m.targetTile.unitType.hp));
+            }
+        });
+    }
+
+    function update() {
+        for (let i = marches.length - 1; i >= 0; i--) {
+            let m = marches[i];
+            if (m.progress < 1) {
+                m.progress += 0.015;
+            } else {
+                if (m.targetTile.owner === m.team || m.targetTile.owner === 'neutral') {
+                    m.targetTile.owner = m.team;
+                    m.targetTile.unitType = m.unitType;
+                    m.targetTile.units += m.units;
+                    m.targetTile.currentHP += m.totalHP;
+                    if(m.team === 'france') selectedTile = m.targetTile;
+                    marches.splice(i, 1);
+                } else if (m.units <= 0) {
+                    marches.splice(i, 1);
+                } else if (m.targetTile.units <= 0) {
+                    m.targetTile.owner = m.team;
+                    m.targetTile.unitType = m.unitType;
+                    m.targetTile.units = m.units;
+                    m.targetTile.currentHP = m.totalHP;
+                    m.targetTile.type = 'empty';
+                    if(m.team === 'france') selectedTile = m.targetTile;
+                    marches.splice(i, 1);
+                }
+            }
         }
     }
 
@@ -222,15 +279,9 @@
         marches.forEach(m => {
             let x = (m.fromX * 50 + 25) + (m.toX - m.fromX) * 50 * m.progress;
             let y = (m.fromY * 50 + 25) + (m.toY - m.fromY) * 50 * m.progress;
-            
-            // Red arrow for battle, Blue/Orange for movement
             ctx.beginPath();
             ctx.strokeStyle = (m.progress >= 1) ? "#ff0000" : (m.team === 'france' ? "#3498db" : "#e74c3c");
-            ctx.lineWidth = 4;
-            ctx.moveTo(m.fromX * 50 + 25, m.fromY * 50 + 25);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-
+            ctx.lineWidth = 4; ctx.moveTo(m.fromX * 50 + 25, m.fromY * 50 + 25); ctx.lineTo(x, y); ctx.stroke();
             if (m.progress < 1) drawUnit(m.unitType.icon, x - 10, y - 10);
         });
 
@@ -240,16 +291,13 @@
 
     function drawUnit(icon, x, y) {
         if (icon.startsWith('http')) {
-            if (imageCache[icon]) ctx.drawImage(imageCache[icon], x, y, 20, 20);
-        } else {
-            ctx.font = "16px Arial";
-            ctx.fillText(icon, x, y);
-        }
+            if (!imageCache[icon]) { imageCache[icon] = new Image(); imageCache[icon].src = icon; }
+            ctx.drawImage(imageCache[icon], x, y, 20, 20);
+        } else { ctx.font = "16px Arial"; ctx.fillText(icon, x, y); }
     }
 
-    // AI Logic
     function runAI() {
-        aiMoney += 10;
+        aiMoney += 15;
         let aiTiles = tiles.filter(t => t.owner === 'germany');
         if (aiMoney >= 20 && aiTiles.length > 0) {
             let t = aiTiles[Math.floor(Math.random() * aiTiles.length)];
@@ -263,37 +311,23 @@
         });
     }
 
-    // UI & Selectors
-    function openRecruitMenu() {
-        document.getElementById('recruitSelect').style.display = 'flex';
-        document.getElementById('unitListOptions').innerHTML = unitRegistry.filter(u => u.team === "france").map(u => 
-            `<button class="btn btn-build" onclick="buyUnit('${u.name}')">${u.icon.startsWith('http') ? '🖼️' : u.icon} ${u.name} ($${u.cost})</button>`
-        ).join('');
-    }
-    function buyUnit(name) {
-        let u = unitRegistry.find(r => r.name === name);
-        if (money >= u.cost && selectedTile && selectedTile.owner === 'france') {
-            money -= u.cost; selectedTile.units += 1; selectedTile.currentHP += u.hp; selectedTile.unitType = u;
-        }
-        closeRecruit(); updateUI();
-    }
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const col = Math.floor((e.clientX - rect.left) / TILE_SIZE);
-        const row = Math.floor((e.clientY - rect.top) / TILE_SIZE);
-        const clickedTile = tiles.find(t => t.x === col && t.y === row);
-        if (e.button === 0) { selectedTile = clickedTile; if(clickedTile.owner === 'france') showMenu(e.clientX - rect.left, e.clientY - rect.top, clickedTile); }
-        else if (e.button === 2 && selectedTile) startMarch(selectedTile, clickedTile, 'france');
-        updateUI();
-    });
-    function clickFactory() { let inc = 1; tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; }); money += inc; updateUI(); }
+    // --- UI HELPERS ---
     function showMenu(x, y, t) { menuTarget = t; let m = document.getElementById('tileMenu'); m.style.display = 'flex'; m.style.left = x + "px"; m.style.top = y + "px"; }
     function closeMenu() { document.getElementById('tileMenu').style.display = 'none'; }
     function closeAdmin() { document.getElementById('adminSection').style.display = 'none'; }
     function closeRecruit() { document.getElementById('recruitSelect').style.display = 'none'; }
-    function openAdmin() { if(prompt("Pass:") === "Lahazavr88@99") { document.getElementById('adminSection').style.display = 'flex'; renderAdminUnits(); } }
-    function renderAdminUnits() { document.getElementById('existingUnits').innerHTML = unitRegistry.map(u => `• ${u.name} (HP:${u.hp} ATK:${u.atk})`).join('<br>'); }
+    function openAdmin() { if(prompt("Pass:") === "Lahazavr88@99") { document.getElementById('adminSection').style.display = 'flex'; } }
+    function addNewUnit() {
+        const name = document.getElementById('newUnitName').value;
+        const icon = document.getElementById('newUnitIcon').value;
+        const cost = parseInt(document.getElementById('newUnitCost').value) || 10;
+        const hp = parseInt(document.getElementById('newUnitHP').value) || 100;
+        const atk = parseInt(document.getElementById('newUnitAtk').value) || 20;
+        const team = document.getElementById('newUnitTeam').value;
+        unitRegistry.push({ name, icon, cost, hp, atk, team });
+    }
     function build(t) { if(t==='factory' && money>=30){money-=30; menuTarget.type='factory';} else if(t==='fort' && money>=25){money-=25; menuTarget.type='fort'; menuTarget.level++;} closeMenu(); updateUI(); }
+    function clickFactory() { let inc = 1; tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; }); money += inc; updateUI(); }
     function updateUI() { moneyEl.innerText = Math.floor(money); let inc = 1; tiles.forEach(t => { if(t.owner === 'france' && t.type === 'factory') inc++; }); document.getElementById('incomeVal').innerText = inc; }
 </script>
 </body>
